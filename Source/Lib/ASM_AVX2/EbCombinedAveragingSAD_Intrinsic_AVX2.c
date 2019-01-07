@@ -5,8 +5,237 @@
 
 
 #include "EbCombinedAveragingSAD_Intrinsic_AVX2.h"
+#include "EbMemory_AVX2.h"
 #include "immintrin.h"
 
+EB_U32 CombinedAveraging8xMSAD_AVX2_INTRIN(
+	EB_U8  *src,
+	EB_U32  srcStride,
+	EB_U8  *ref1,
+	EB_U32  ref1Stride,
+	EB_U8  *ref2,
+	EB_U32  ref2Stride,
+	EB_U32  height,
+	EB_U32  width)
+{
+	__m256i sum = _mm256_setzero_si256();
+	__m128i sad;
+	EB_U32 y;
+	(void)width;
+
+	for (y = 0; y < height; y += 4) {
+		const __m256i s = load8bit_8x4_avx2(src, srcStride);
+		const __m256i r1 = load8bit_8x4_avx2(ref1, ref1Stride);
+		const __m256i r2 = load8bit_8x4_avx2(ref2, ref2Stride);
+		const __m256i avg = _mm256_avg_epu8(r1, r2);
+		const __m256i sad = _mm256_sad_epu8(s, avg);
+		sum = _mm256_add_epi32(sum, sad);
+		src += srcStride << 2;
+		ref1 += ref1Stride << 2;
+		ref2 += ref2Stride << 2;
+	}
+
+	sad = _mm_add_epi32(_mm256_castsi256_si128(sum),
+		_mm256_extracti128_si256(sum, 1));
+	sad = _mm_add_epi32(sad, _mm_srli_si128(sad, 8));
+
+	return _mm_cvtsi128_si32(sad);
+}
+
+static inline __m256i CombinedAveragingSad16x2_AVX2(const EB_U8 *const src,
+	const EB_U32 srcStride, const EB_U8 *const ref1, const EB_U32 ref1Stride,
+	const EB_U8 *const ref2, const EB_U32 ref2Stride, const __m256i sum)
+{
+	const __m256i s = load8bit_16x2_unaligned_avx2(src, srcStride);
+	const __m256i r1 = load8bit_16x2_unaligned_avx2(ref1, ref1Stride);
+	const __m256i r2 = load8bit_16x2_unaligned_avx2(ref2, ref2Stride);
+	const __m256i avg = _mm256_avg_epu8(r1, r2);
+	const __m256i sad = _mm256_sad_epu8(s, avg);
+	return _mm256_add_epi32(sum, sad);
+}
+
+EB_U32 CombinedAveraging16xMSAD_AVX2_INTRIN(
+	EB_U8  *src,
+	EB_U32  srcStride,
+	EB_U8  *ref1,
+	EB_U32  ref1Stride,
+	EB_U8  *ref2,
+	EB_U32  ref2Stride,
+	EB_U32  height,
+	EB_U32  width)
+{
+	__m256i sum = _mm256_setzero_si256();
+	__m128i sad;
+	EB_U32 y;
+	(void)width;
+
+	for (y = 0; y < height; y += 2) {
+		sum = CombinedAveragingSad16x2_AVX2(src, srcStride, ref1, ref1Stride,
+			ref2, ref2Stride, sum);
+		src += srcStride << 1;
+		ref1 += ref1Stride << 1;
+		ref2 += ref2Stride << 1;
+	}
+
+	sad = _mm_add_epi32(_mm256_castsi256_si128(sum),
+		_mm256_extracti128_si256(sum, 1));
+	sad = _mm_add_epi32(sad, _mm_srli_si128(sad, 8));
+
+	return _mm_cvtsi128_si32(sad);
+}
+
+static inline __m256i CombinedAveragingSad24_AVX2(const EB_U8 *const src,
+	const EB_U8 *const ref1, const EB_U8 *const ref2, const __m256i sum)
+{
+	const __m256i s = _mm256_loadu_si256((__m256i*)src);
+	const __m256i r1 = _mm256_loadu_si256((__m256i*)ref1);
+	const __m256i r2 = _mm256_loadu_si256((__m256i*)ref2);
+	const __m256i avg = _mm256_avg_epu8(r1, r2);
+	const __m256i sad = _mm256_sad_epu8(s, avg);
+	return _mm256_add_epi32(sum, sad);
+}
+
+EB_U32 CombinedAveraging24xMSAD_AVX2_INTRIN(
+	EB_U8  *src,
+	EB_U32  srcStride,
+	EB_U8  *ref1,
+	EB_U32  ref1Stride,
+	EB_U8  *ref2,
+	EB_U32  ref2Stride,
+	EB_U32  height,
+	EB_U32  width)
+{
+	__m256i sum = _mm256_setzero_si256();
+	__m128i sad;
+	EB_U32 y;
+	(void)width;
+
+	for (y = 0; y < height; y += 2) {
+		sum = CombinedAveragingSad24_AVX2(src + 0 * srcStride,
+			ref1 + 0 * ref1Stride, ref2 + 0 * ref2Stride, sum);
+		sum = CombinedAveragingSad24_AVX2(src + 1 * srcStride,
+			ref1 + 1 * ref1Stride, ref2 + 1 * ref2Stride, sum);
+		src += srcStride << 1;
+		ref1 += ref1Stride << 1;
+		ref2 += ref2Stride << 1;
+	}
+
+	sad = _mm_add_epi32(_mm256_castsi256_si128(sum),
+		_mm_slli_si128(_mm256_extracti128_si256(sum, 1), 8));
+	sad = _mm_add_epi32(sad, _mm_srli_si128(sad, 8));
+
+	return _mm_cvtsi128_si32(sad);
+}
+
+static inline __m256i CombinedAveragingSad32_AVX2(const EB_U8 *const src,
+	const EB_U8 *const ref1, const EB_U8 *const ref2, const __m256i sum)
+{
+	const __m256i s = _mm256_loadu_si256((__m256i*)src);
+	const __m256i r1 = _mm256_loadu_si256((__m256i*)ref1);
+	const __m256i r2 = _mm256_loadu_si256((__m256i*)ref2);
+	const __m256i avg = _mm256_avg_epu8(r1, r2);
+	const __m256i sad = _mm256_sad_epu8(s, avg);
+	return _mm256_add_epi32(sum, sad);
+}
+
+EB_U32 CombinedAveraging32xMSAD_AVX2_INTRIN(
+	EB_U8  *src,
+	EB_U32  srcStride,
+	EB_U8  *ref1,
+	EB_U32  ref1Stride,
+	EB_U8  *ref2,
+	EB_U32  ref2Stride,
+	EB_U32  height,
+	EB_U32  width)
+{
+	__m256i sum = _mm256_setzero_si256();
+	__m128i sad;
+	EB_U32 y;
+	(void)width;
+
+	for (y = 0; y < height; y += 2) {
+		sum = CombinedAveragingSad32_AVX2(src + 0 * srcStride,
+			ref1 + 0 * ref1Stride, ref2 + 0 * ref2Stride, sum);
+		sum = CombinedAveragingSad32_AVX2(src + 1 * srcStride,
+			ref1 + 1 * ref1Stride, ref2 + 1 * ref2Stride, sum);
+		src += srcStride << 1;
+		ref1 += ref1Stride << 1;
+		ref2 += ref2Stride << 1;
+	}
+
+	sad = _mm_add_epi32(_mm256_castsi256_si128(sum),
+		_mm256_extracti128_si256(sum, 1));
+	sad = _mm_add_epi32(sad, _mm_srli_si128(sad, 8));
+
+	return _mm_cvtsi128_si32(sad);
+}
+
+EB_U32 CombinedAveraging48xMSAD_AVX2_INTRIN(
+	EB_U8  *src,
+	EB_U32  srcStride,
+	EB_U8  *ref1,
+	EB_U32  ref1Stride,
+	EB_U8  *ref2,
+	EB_U32  ref2Stride,
+	EB_U32  height,
+	EB_U32  width)
+{
+	__m256i sum = _mm256_setzero_si256();
+	__m128i sad;
+	EB_U32 y;
+	(void)width;
+
+	for (y = 0; y < height; y += 2) {
+		sum = CombinedAveragingSad32_AVX2(src + 0 * srcStride,
+			ref1 + 0 * ref1Stride, ref2 + 0 * ref2Stride, sum);
+		sum = CombinedAveragingSad32_AVX2(src + 1 * srcStride,
+			ref1 + 1 * ref1Stride, ref2 + 1 * ref2Stride, sum);
+		sum = CombinedAveragingSad16x2_AVX2(src + 32, srcStride, ref1 + 32,
+			ref1Stride, ref2 + 32, ref2Stride, sum);
+
+		src += srcStride << 1;
+		ref1 += ref1Stride << 1;
+		ref2 += ref2Stride << 1;
+	}
+
+	sad = _mm_add_epi32(_mm256_castsi256_si128(sum),
+		_mm256_extracti128_si256(sum, 1));
+	sad = _mm_add_epi32(sad, _mm_srli_si128(sad, 8));
+
+	return _mm_cvtsi128_si32(sad);
+}
+
+EB_U32 CombinedAveraging64xMSAD_AVX2_INTRIN(
+	EB_U8  *src,
+	EB_U32  srcStride,
+	EB_U8  *ref1,
+	EB_U32  ref1Stride,
+	EB_U8  *ref2,
+	EB_U32  ref2Stride,
+	EB_U32  height,
+	EB_U32  width)
+{
+	__m256i sum = _mm256_setzero_si256();
+	__m128i sad;
+	EB_U32 y;
+	(void)width;
+
+	for (y = 0; y < height; y++) {
+		sum = CombinedAveragingSad32_AVX2(src + 0x00,
+			ref1 + 0x00, ref2 + 0x00, sum);
+		sum = CombinedAveragingSad32_AVX2(src + 0x20,
+			ref1 + 0x20, ref2 + 0x20, sum);
+		src += srcStride;
+		ref1 += ref1Stride;
+		ref2 += ref2Stride;
+	}
+
+	sad = _mm_add_epi32(_mm256_castsi256_si128(sum),
+		_mm256_extracti128_si256(sum, 1));
+	sad = _mm_add_epi32(sad, _mm_srli_si128(sad, 8));
+
+	return _mm_cvtsi128_si32(sad);
+}
 #define _mm256_set_m128i(/* __m128i */ hi, /* __m128i */ lo) \
     _mm256_insertf128_si256(_mm256_castsi128_si256(lo), (hi), 0x1)
 

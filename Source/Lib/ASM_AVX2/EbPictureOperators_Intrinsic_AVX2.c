@@ -6,12 +6,21 @@
 
 #include <stdio.h>
 #include <immintrin.h>
+#include "EbMemory_AVX2.h"
 #include "EbDefinitions.h"
 #include "EbPictureOperators_AVX2.h"
 
 #define _mm256_set_m128i(/* __m128i */ hi, /* __m128i */ lo) \
     _mm256_insertf128_si256(_mm256_castsi128_si256(lo), (hi), 0x1)
 
+static __m128i _mm_loadhi_epi64(__m128i x, __m128i *p)
+{
+	return _mm_castpd_si128(_mm_loadh_pd(_mm_castsi128_pd(x), (double *)p));
+}
+
+static inline void _mm_storeh_epi64(__m128i *const d, const __m128i s) {
+	_mm_storeh_pi((__m64 *)d, _mm_castsi128_ps(s));
+}
 void CompressedPackmsb_AVX2_INTRIN(
     EB_U8     *in8BitBuffer,
     EB_U32     in8Stride,
@@ -1658,3 +1667,471 @@ void UnpackAvgSafeSub_AVX2_INTRIN(
     return;
 }
 
+void FullDistortionKernel4x4_32bit_BT_AVX2(
+	EB_S16  *coeff,
+	EB_U32   coeffStride,
+	EB_S16  *reconCoeff,
+	EB_U32   reconCoeffStride,
+	EB_U64   distortionResult[2],
+	EB_U32   areaWidth,
+	EB_U32   areaHeight)
+{
+	__m256i sum1 = _mm256_setzero_si256();
+	__m256i sum2 = _mm256_setzero_si256();
+	__m128i m0, m1;
+	__m256i x, y, z;
+	m0 = _mm_loadl_epi64((__m128i *)coeff); coeff += coeffStride;
+	m0 = _mm_loadhi_epi64(m0, (__m128i *)coeff); coeff += coeffStride;
+	m1 = _mm_loadl_epi64((__m128i *)coeff); coeff += coeffStride;
+	m1 = _mm_loadhi_epi64(m1, (__m128i *)coeff); coeff += coeffStride;
+	x = _mm256_set_m128i(m1, m0);
+	m0 = _mm_loadl_epi64((__m128i *)reconCoeff); reconCoeff += reconCoeffStride;
+	m0 = _mm_loadhi_epi64(m0, (__m128i *)reconCoeff); reconCoeff += reconCoeffStride;
+	m1 = _mm_loadl_epi64((__m128i *)reconCoeff); reconCoeff += reconCoeffStride;
+	m1 = _mm_loadhi_epi64(m1, (__m128i *)reconCoeff); reconCoeff += reconCoeffStride;
+	y = _mm256_set_m128i(m1, m0);
+	z = _mm256_madd_epi16(x, x);
+	sum2 = _mm256_add_epi32(sum2, z);
+	x = _mm256_sub_epi16(x, y);
+	x = _mm256_madd_epi16(x, x);
+	sum1 = _mm256_add_epi32(sum1, x);
+	sum1 = _mm256_add_epi32(sum1, _mm256_shuffle_epi32(sum1, 0x4e)); // 01001110
+	sum2 = _mm256_add_epi32(sum2, _mm256_shuffle_epi32(sum2, 0x4e)); // 01001110
+	sum1 = _mm256_unpacklo_epi32(sum1, sum2);
+	sum1 = _mm256_add_epi32(sum1, _mm256_shuffle_epi32(sum1, 0x4e)); // 01001110
+	m0 = _mm256_extracti128_si256(sum1, 0);
+	m1 = _mm256_extracti128_si256(sum1, 1);
+	m0 = _mm_add_epi32(m0, m1);
+	_mm_storeu_si128((__m128i *)distortionResult, _mm_unpacklo_epi32(m0, _mm_setzero_si128()));
+
+	(void)areaWidth;
+	(void)areaHeight;
+}
+
+void FullDistortionKernel8x8_32bit_BT_AVX2(
+	EB_S16  *coeff,
+	EB_U32   coeffStride,
+	EB_S16  *reconCoeff,
+	EB_U32   reconCoeffStride,
+	EB_U64   distortionResult[2],
+	EB_U32   areaWidth,
+	EB_U32   areaHeight)
+{
+	EB_S32 rowCount;
+
+	__m256i sum1 = _mm256_setzero_si256();
+	__m256i sum2 = _mm256_setzero_si256();
+	__m128i temp1, temp2;
+
+	rowCount = 4;
+	do
+	{
+		__m128i m0, m1;
+		__m256i x, y, z;
+
+		m0 = _mm_loadu_si128((__m128i *)(coeff));
+		coeff += coeffStride;
+		m1 = _mm_loadu_si128((__m128i *)(coeff));
+		coeff += coeffStride;
+		x = _mm256_set_m128i(m1, m0);
+
+		m0 = _mm_loadu_si128((__m128i *)(reconCoeff));
+		reconCoeff += reconCoeffStride;
+		m1 = _mm_loadu_si128((__m128i *)(reconCoeff));
+		reconCoeff += reconCoeffStride;
+		y = _mm256_set_m128i(m1, m0);
+
+		z = _mm256_madd_epi16(x, x);
+		sum2 = _mm256_add_epi32(sum2, z);
+		x = _mm256_sub_epi16(x, y);
+		x = _mm256_madd_epi16(x, x);
+		sum1 = _mm256_add_epi32(sum1, x);
+	} while (--rowCount);
+
+	sum1 = _mm256_add_epi32(sum1, _mm256_shuffle_epi32(sum1, 0x4e)); // 01001110
+	sum2 = _mm256_add_epi32(sum2, _mm256_shuffle_epi32(sum2, 0x4e)); // 01001110
+	sum1 = _mm256_unpacklo_epi32(sum1, sum2);
+	sum1 = _mm256_add_epi32(sum1, _mm256_shuffle_epi32(sum1, 0x4e)); // 01001110
+	temp1 = _mm256_extracti128_si256(sum1, 0);
+	temp2 = _mm256_extracti128_si256(sum1, 1);
+	temp1 = _mm_add_epi32(temp1, temp2);
+	_mm_storeu_si128((__m128i *)distortionResult, _mm_unpacklo_epi32(temp1, _mm_setzero_si128()));
+
+	(void)areaWidth;
+	(void)areaHeight;
+}
+
+void FullDistortionKernel16MxN_32bit_BT_AVX2(
+	EB_S16  *coeff,
+	EB_U32   coeffStride,
+	EB_S16  *reconCoeff,
+	EB_U32   reconCoeffStride,
+	EB_U64   distortionResult[2],
+	EB_U32   areaWidth,
+	EB_U32   areaHeight)
+{
+	EB_S32 rowCount, colCount;
+	__m256i sum1 = _mm256_setzero_si256();
+	__m256i sum2 = _mm256_setzero_si256();
+	__m128i temp1, temp2;
+
+	colCount = areaWidth;
+	do
+	{
+		EB_S16 *coeffTemp = coeff;
+		EB_S16 *reconCoeffTemp = reconCoeff;
+
+		rowCount = areaHeight;
+		do
+		{
+			__m256i x, y, z;
+			x = _mm256_loadu_si256((__m256i *)(coeffTemp));
+			y = _mm256_loadu_si256((__m256i *)(reconCoeffTemp));
+			coeffTemp += coeffStride;
+			reconCoeffTemp += reconCoeffStride;
+
+			z = _mm256_madd_epi16(x, x);
+			sum2 = _mm256_add_epi32(sum2, z);
+			x = _mm256_sub_epi16(x, y);
+			x = _mm256_madd_epi16(x, x);
+			sum1 = _mm256_add_epi32(sum1, x);
+		} while (--rowCount);
+
+		coeff += 16;
+		reconCoeff += 16;
+		colCount -= 16;
+	} while (colCount > 0);
+
+	sum1 = _mm256_add_epi32(sum1, _mm256_shuffle_epi32(sum1, 0x4e)); // 01001110
+	sum2 = _mm256_add_epi32(sum2, _mm256_shuffle_epi32(sum2, 0x4e)); // 01001110
+	sum1 = _mm256_unpacklo_epi32(sum1, sum2);
+	sum1 = _mm256_add_epi32(sum1, _mm256_shuffle_epi32(sum1, 0x4e)); // 01001110
+	temp1 = _mm256_extracti128_si256(sum1, 0);
+	temp2 = _mm256_extracti128_si256(sum1, 1);
+	temp1 = _mm_add_epi32(temp1, temp2);
+	_mm_storeu_si128((__m128i *)distortionResult, _mm_unpacklo_epi32(temp1, _mm_setzero_si128()));
+}
+
+void PictureAverageKernel_AVX2_INTRIN(
+	EB_BYTE                  src0,
+	EB_U32                   src0Stride,
+	EB_BYTE                  src1,
+	EB_U32                   src1Stride,
+	EB_BYTE                  dst,
+	EB_U32                   dstStride,
+	EB_U32                   areaWidth,
+	EB_U32                   areaHeight)
+{
+	__m128i xmm_avg1, xmm_avg2, xmm_avg3, xmm_avg4, temp1, temp2, temp3, temp4;
+	__m256i ymm_avg1, ymm_avg2, ymm_avg3, ymm_avg4;
+	EB_U32 y;
+	if (areaWidth >= 16)
+	{
+		if (areaWidth == 16)
+		{
+			for (y = 0; y < areaHeight; y += 2) {
+				temp1 = _mm_loadu_si128((__m128i*)src0);
+				temp2 = _mm_loadu_si128((__m128i*)(src0 + src0Stride));
+				temp3 = _mm_loadu_si128((__m128i*)src1);
+				temp4 = _mm_loadu_si128((__m128i*)(src1 + src1Stride));
+				ymm_avg1 = _mm256_avg_epu8(_mm256_set_m128i(temp2, temp1), _mm256_set_m128i(temp4, temp3));
+				xmm_avg1 = _mm256_extracti128_si256(ymm_avg1, 0);
+				xmm_avg2 = _mm256_extracti128_si256(ymm_avg1, 1);
+				_mm_storeu_si128((__m128i*) dst, xmm_avg1);
+				_mm_storeu_si128((__m128i*) (dst + dstStride), xmm_avg2);
+
+				src0 += src0Stride << 1;
+				src1 += src1Stride << 1;
+				dst += dstStride << 1;
+			}
+		}
+		else if (areaWidth == 24)
+		{
+			for (y = 0; y < areaHeight; y += 2) {
+				xmm_avg1 = _mm_avg_epu8(_mm_loadu_si128((__m128i*)src0), _mm_loadu_si128((__m128i*)src1));
+				xmm_avg2 = _mm_avg_epu8(_mm_loadl_epi64((__m128i*)(src0 + 16)), _mm_loadl_epi64((__m128i*)(src1 + 16)));
+				xmm_avg3 = _mm_avg_epu8(_mm_loadu_si128((__m128i*)(src0 + src0Stride)), _mm_loadu_si128((__m128i*)(src1 + src1Stride)));
+				xmm_avg4 = _mm_avg_epu8(_mm_loadl_epi64((__m128i*)(src0 + src0Stride + 16)), _mm_loadl_epi64((__m128i*)(src1 + src1Stride + 16)));
+
+				_mm_storeu_si128((__m128i*) dst, xmm_avg1);
+				_mm_storel_epi64((__m128i*) (dst + 16), xmm_avg2);
+				_mm_storeu_si128((__m128i*) (dst + dstStride), xmm_avg3);
+				_mm_storel_epi64((__m128i*) (dst + dstStride + 16), xmm_avg4);
+
+				src0 += src0Stride << 1;
+				src1 += src1Stride << 1;
+				dst += dstStride << 1;
+			}
+		}
+		else if (areaWidth == 32)
+		{
+			for (y = 0; y < areaHeight; y += 2) {
+
+				ymm_avg1 = _mm256_avg_epu8(_mm256_loadu_si256((__m256i*)src0), _mm256_loadu_si256((__m256i*)src1));
+				ymm_avg2 = _mm256_avg_epu8(_mm256_loadu_si256((__m256i*)(src0 + src0Stride)), _mm256_loadu_si256((__m256i*)(src1 + src1Stride)));
+
+				_mm256_storeu_si256((__m256i*) dst, ymm_avg1);
+				_mm256_storeu_si256((__m256i*) (dst + dstStride), ymm_avg2);
+
+				src0 += src0Stride << 1;
+				src1 += src1Stride << 1;
+				dst += dstStride << 1;
+			}
+		}
+		else if (areaWidth == 48)
+		{
+			for (y = 0; y < areaHeight; y += 2) {
+				ymm_avg1 = _mm256_avg_epu8(_mm256_loadu_si256((__m256i*)src0), _mm256_loadu_si256((__m256i*)src1));
+				xmm_avg1 = _mm_avg_epu8(_mm_loadu_si128((__m128i*)(src0 + 32)), _mm_loadu_si128((__m128i*)(src1 + 32)));
+
+				ymm_avg2 = _mm256_avg_epu8(_mm256_loadu_si256((__m256i*)(src0 + src0Stride)), _mm256_loadu_si256((__m256i*)(src1 + src1Stride)));
+				xmm_avg2 = _mm_avg_epu8(_mm_loadu_si128((__m128i*)(src0 + src0Stride + 32)), _mm_loadu_si128((__m128i*)(src1 + src1Stride + 32)));
+
+				_mm256_storeu_si256((__m256i*) dst, ymm_avg1);
+				_mm_storeu_si128((__m128i*) (dst + 32), xmm_avg1);
+				_mm256_storeu_si256((__m256i*) (dst + dstStride), ymm_avg2);
+				_mm_storeu_si128((__m128i*) (dst + dstStride + 32), xmm_avg2);
+
+				src0 += src0Stride << 1;
+				src1 += src1Stride << 1;
+				dst += dstStride << 1;
+
+			}
+		}
+		else
+		{
+			for (y = 0; y < areaHeight; y += 2) {
+				ymm_avg1 = _mm256_avg_epu8(_mm256_loadu_si256((__m256i*)src0), _mm256_loadu_si256((__m256i*)src1));
+				ymm_avg2 = _mm256_avg_epu8(_mm256_loadu_si256((__m256i*)(src0 + 32)), _mm256_loadu_si256((__m256i*)(src1 + 32)));
+				ymm_avg3 = _mm256_avg_epu8(_mm256_loadu_si256((__m256i*)(src0 + src0Stride)), _mm256_loadu_si256((__m256i*)(src1 + src1Stride)));
+				ymm_avg4 = _mm256_avg_epu8(_mm256_loadu_si256((__m256i*)(src0 + src0Stride + 32)), _mm256_loadu_si256((__m256i*)(src1 + src1Stride + 32)));
+
+				_mm256_storeu_si256((__m256i*) dst, ymm_avg1);
+				_mm256_storeu_si256((__m256i*) (dst + 32), ymm_avg2);
+				_mm256_storeu_si256((__m256i*) (dst + dstStride), ymm_avg3);
+				_mm256_storeu_si256((__m256i*) (dst + dstStride + 32), ymm_avg4);
+
+				src0 += src0Stride << 1;
+				src1 += src1Stride << 1;
+				dst += dstStride << 1;
+			}
+		}
+	}
+	else
+	{
+		if (areaWidth == 4)
+		{
+			for (y = 0; y < areaHeight; y += 2) {
+
+				xmm_avg1 = _mm_avg_epu8(_mm_cvtsi32_si128(*(EB_U32 *)src0), _mm_cvtsi32_si128(*(EB_U32 *)src1));
+				xmm_avg2 = _mm_avg_epu8(_mm_cvtsi32_si128(*(EB_U32 *)(src0 + src0Stride)), _mm_cvtsi32_si128(*(EB_U32 *)(src1 + src1Stride)));
+
+				*(EB_U32 *)dst = _mm_cvtsi128_si32(xmm_avg1);
+				*(EB_U32 *)(dst + dstStride) = _mm_cvtsi128_si32(xmm_avg2);
+
+				src0 += src0Stride << 1;
+				src1 += src1Stride << 1;
+				dst += dstStride << 1;
+			}
+		}
+		else if (areaWidth == 8)
+		{
+			for (y = 0; y < areaHeight; y += 2) {
+
+				xmm_avg1 = _mm_avg_epu8(_mm_loadl_epi64((__m128i*)src0), _mm_loadl_epi64((__m128i*)src1));
+				xmm_avg2 = _mm_avg_epu8(_mm_loadl_epi64((__m128i*)(src0 + src0Stride)), _mm_loadl_epi64((__m128i*)(src1 + src1Stride)));
+
+				_mm_storel_epi64((__m128i*) dst, xmm_avg1);
+				_mm_storel_epi64((__m128i*) (dst + dstStride), xmm_avg2);
+
+				src0 += src0Stride << 1;
+				src1 += src1Stride << 1;
+				dst += dstStride << 1;
+			}
+		}
+		else
+		{
+			for (y = 0; y < areaHeight; y += 2) {
+
+				xmm_avg1 = _mm_avg_epu8(_mm_loadl_epi64((__m128i*)src0), _mm_loadl_epi64((__m128i*)src1));
+				xmm_avg2 = _mm_avg_epu8(_mm_cvtsi32_si128(*(EB_U32 *)(src0 + 8)), _mm_cvtsi32_si128(*(EB_U32 *)(src1 + 8)));
+
+				xmm_avg3 = _mm_avg_epu8(_mm_loadl_epi64((__m128i*)(src0 + src0Stride)), _mm_loadl_epi64((__m128i*)(src1 + src1Stride)));
+				xmm_avg4 = _mm_avg_epu8(_mm_cvtsi32_si128(*(EB_U32 *)(src0 + src0Stride + 8)), _mm_cvtsi32_si128(*(EB_U32 *)(src1 + src1Stride + 8)));
+
+				_mm_storel_epi64((__m128i*) dst, xmm_avg1);
+				*(EB_U32 *)(dst + 8) = _mm_cvtsi128_si32(xmm_avg2);
+				_mm_storel_epi64((__m128i*) (dst + dstStride), xmm_avg3);
+				*(EB_U32 *)(dst + dstStride + 8) = _mm_cvtsi128_si32(xmm_avg4);
+
+				src0 += src0Stride << 1;
+				src1 += src1Stride << 1;
+				dst += dstStride << 1;
+			}
+		}
+	}
+}
+
+void ResidualKernel4x4_AVX2_INTRIN(
+	EB_U8   *input,
+	EB_U32   inputStride,
+	EB_U8   *pred,
+	EB_U32   predStride,
+	EB_S16  *residual,
+	EB_U32   residualStride,
+	EB_U32   areaWidth,
+	EB_U32   areaHeight)
+{
+	const __m256i zero = _mm256_setzero_si256();
+	const __m256i in = load8bit_4x4_avx2(input, inputStride);
+	const __m256i pr = load8bit_4x4_avx2(pred, predStride);
+	const __m256i in_lo = _mm256_unpacklo_epi8(in, zero);
+	const __m256i pr_lo = _mm256_unpacklo_epi8(pr, zero);
+	const __m256i re_lo = _mm256_sub_epi16(in_lo, pr_lo);
+	const __m128i re_01 = _mm256_extracti128_si256(re_lo, 0);
+	const __m128i re_23 = _mm256_extracti128_si256(re_lo, 1);
+	(void)areaWidth;
+	(void)areaHeight;
+
+	_mm_storel_epi64((__m128i*)(residual + 0 * residualStride), re_01);
+	_mm_storeh_epi64((__m128i*)(residual + 1 * residualStride), re_01);
+	_mm_storel_epi64((__m128i*)(residual + 2 * residualStride), re_23);
+	_mm_storeh_epi64((__m128i*)(residual + 3 * residualStride), re_23);
+}
+
+void ResidualKernel8x8_AVX2_INTRIN(
+	EB_U8   *input,
+	EB_U32   inputStride,
+	EB_U8   *pred,
+	EB_U32   predStride,
+	EB_S16  *residual,
+	EB_U32   residualStride,
+	EB_U32   areaWidth,
+	EB_U32   areaHeight)
+{
+	const __m256i zero = _mm256_setzero_si256();
+	EB_U32 y;
+	(void)areaWidth;
+	(void)areaHeight;
+
+	for (y = 0; y < 8; y += 4) {
+		const __m256i in = load8bit_8x4_avx2(input, inputStride);
+		const __m256i pr = load8bit_8x4_avx2(pred, predStride);
+		const __m256i in_lo = _mm256_unpacklo_epi8(in, zero);
+		const __m256i in_hi = _mm256_unpackhi_epi8(in, zero);
+		const __m256i pr_lo = _mm256_unpacklo_epi8(pr, zero);
+		const __m256i pr_hi = _mm256_unpackhi_epi8(pr, zero);
+		const __m256i re_lo = _mm256_sub_epi16(in_lo, pr_lo);
+		const __m256i re_hi = _mm256_sub_epi16(in_hi, pr_hi);
+		const __m128i re_0 = _mm256_extracti128_si256(re_lo, 0);
+		const __m128i re_1 = _mm256_extracti128_si256(re_hi, 0);
+		const __m128i re_2 = _mm256_extracti128_si256(re_lo, 1);
+		const __m128i re_3 = _mm256_extracti128_si256(re_hi, 1);
+
+		_mm_storeu_si128((__m128i*)(residual + 0 * residualStride), re_0);
+		_mm_storeu_si128((__m128i*)(residual + 1 * residualStride), re_1);
+		_mm_storeu_si128((__m128i*)(residual + 2 * residualStride), re_2);
+		_mm_storeu_si128((__m128i*)(residual + 3 * residualStride), re_3);
+		input += 4 * inputStride;
+		pred += 4 * predStride;
+		residual += 4 * residualStride;
+	}
+}
+
+void ResidualKernel16x16_AVX2_INTRIN(
+	EB_U8   *input,
+	EB_U32   inputStride,
+	EB_U8   *pred,
+	EB_U32   predStride,
+	EB_S16  *residual,
+	EB_U32   residualStride,
+	EB_U32   areaWidth,
+	EB_U32   areaHeight)
+{
+	const __m256i zero = _mm256_setzero_si256();
+	EB_U32 y;
+	(void)areaWidth;
+	(void)areaHeight;
+
+	for (y = 0; y < 16; y += 2) {
+		const __m256i in0 = load8bit_16x2_unaligned_avx2(input, inputStride);
+		const __m256i pr0 = load8bit_16x2_unaligned_avx2(pred, predStride);
+		const __m256i in1 = _mm256_permute4x64_epi64(in0, 0xD8);
+		const __m256i pr1 = _mm256_permute4x64_epi64(pr0, 0xD8);
+		const __m256i in_lo = _mm256_unpacklo_epi8(in1, zero);
+		const __m256i in_hi = _mm256_unpackhi_epi8(in1, zero);
+		const __m256i pr_lo = _mm256_unpacklo_epi8(pr1, zero);
+		const __m256i pr_hi = _mm256_unpackhi_epi8(pr1, zero);
+		const __m256i re_lo = _mm256_sub_epi16(in_lo, pr_lo);
+		const __m256i re_hi = _mm256_sub_epi16(in_hi, pr_hi);
+
+		_mm256_storeu_si256((__m256i*)(residual + 0 * residualStride), re_lo);
+		_mm256_storeu_si256((__m256i*)(residual + 1 * residualStride), re_hi);
+		input += 2 * inputStride;
+		pred += 2 * predStride;
+		residual += 2 * residualStride;
+	}
+}
+
+static inline void ResidualKernel32_AVX2(const EB_U8 *const input,
+	const EB_U8 *const pred, EB_S16 *const residual)
+{
+	const __m256i zero = _mm256_setzero_si256();
+	const __m256i in0 = _mm256_loadu_si256((__m256i *)input);
+	const __m256i pr0 = _mm256_loadu_si256((__m256i *)pred);
+	const __m256i in1 = _mm256_permute4x64_epi64(in0, 0xD8);
+	const __m256i pr1 = _mm256_permute4x64_epi64(pr0, 0xD8);
+	const __m256i in_lo = _mm256_unpacklo_epi8(in1, zero);
+	const __m256i in_hi = _mm256_unpackhi_epi8(in1, zero);
+	const __m256i pr_lo = _mm256_unpacklo_epi8(pr1, zero);
+	const __m256i pr_hi = _mm256_unpackhi_epi8(pr1, zero);
+	const __m256i re_lo = _mm256_sub_epi16(in_lo, pr_lo);
+	const __m256i re_hi = _mm256_sub_epi16(in_hi, pr_hi);
+	_mm256_storeu_si256((__m256i*)(residual + 0x00), re_lo);
+	_mm256_storeu_si256((__m256i*)(residual + 0x10), re_hi);
+}
+
+void ResidualKernel32x32_AVX2_INTRIN(
+	EB_U8   *input,
+	EB_U32   inputStride,
+	EB_U8   *pred,
+	EB_U32   predStride,
+	EB_S16  *residual,
+	EB_U32   residualStride,
+	EB_U32   areaWidth,
+	EB_U32   areaHeight)
+{
+	EB_U32 y;
+	(void)areaWidth;
+	(void)areaHeight;
+
+	for (y = 0; y < 32; ++y) {
+		ResidualKernel32_AVX2(input, pred, residual);
+		input += inputStride;
+		pred += predStride;
+		residual += residualStride;
+	}
+}
+
+void ResidualKernel64x64_AVX2_INTRIN(
+	EB_U8   *input,
+	EB_U32   inputStride,
+	EB_U8   *pred,
+	EB_U32   predStride,
+	EB_S16  *residual,
+	EB_U32   residualStride,
+	EB_U32   areaWidth,
+	EB_U32   areaHeight)
+{
+	EB_U32 y;
+	(void)areaWidth;
+	(void)areaHeight;
+
+	for (y = 0; y < 64; ++y) {
+		ResidualKernel32_AVX2(input + 0x00, pred + 0x00, residual + 0x00);
+		ResidualKernel32_AVX2(input + 0x20, pred + 0x20, residual + 0x20);
+		input += inputStride;
+		pred += predStride;
+		residual += residualStride;
+	}
+}

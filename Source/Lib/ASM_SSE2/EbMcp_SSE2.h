@@ -17,7 +17,6 @@ extern EB_ALIGN(16) const EB_S16 IntraPredictionConst_SSE2[344];
 **************************************************/
 extern void PictureCopyKernel_SSE2(EB_BYTE src, EB_U32 srcStride, EB_BYTE dst, EB_U32 dstStride, EB_U32 areaWidth, EB_U32 areaHeight); 
 void PictureAverageKernel_SSE2(EB_BYTE src0, EB_U32 src0Stride, EB_BYTE src1, EB_U32 src1Stride, EB_BYTE dst, EB_U32 dstStride, EB_U32 areaWidth, EB_U32 areaHeight);
-void PictureAverageKernel_SSE2_INTRIN(EB_BYTE src0, EB_U32 src0Stride, EB_BYTE src1, EB_U32 src1Stride, EB_BYTE dst, EB_U32 dstStride, EB_U32 areaWidth, EB_U32 areaHeight);
 void PictureAverageKernel1Line_SSE2_INTRIN(
 	EB_BYTE                  src0,
 	EB_BYTE                  src1,

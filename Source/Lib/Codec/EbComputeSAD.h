@@ -8,6 +8,7 @@
 
 #include "EbDefinitions.h"
 
+#include "EbCombinedAveragingSAD_Intrinsic_AVX2.h"
 #include "EbComputeSAD_C.h"
 #include "EbComputeSAD_SSE2.h"
 #include "EbComputeSAD_AVX2.h"
@@ -137,14 +138,14 @@ extern "C" {
         // AVX2
         {
             /*0 4xM  */     CombinedAveraging4xMSAD_SSE2_INTRIN,
-            /*1 8xM  */     CombinedAveraging8xMSAD_SSE2_INTRIN,
-            /*2 16xM */     CombinedAveraging16xMSAD_SSE2_INTRIN,
-            /*3 24xM */     CombinedAveraging24xMSAD_SSE2_INTRIN,
-            /*4 32xM */     CombinedAveraging32xMSAD_SSE2_INTRIN,
+            /*1 8xM  */     CombinedAveragingSAD, //CombinedAveraging8xMSAD_AVX2_INTRIN, // TTK disabled due to mismatch between c and AVX2
+            /*2 16xM */     CombinedAveraging16xMSAD_AVX2_INTRIN,
+            /*3 24xM */     CombinedAveraging24xMSAD_AVX2_INTRIN,
+            /*4 32xM */     CombinedAveraging32xMSAD_AVX2_INTRIN,
             /*5      */     (EB_SADAVGKERNELNxM_TYPE)NxMSadKernelVoidFunc,
-            /*6 48xM */     CombinedAveraging48xMSAD_SSE2_INTRIN,
+            /*6 48xM */     CombinedAveraging48xMSAD_AVX2_INTRIN,
             /*7      */     (EB_SADAVGKERNELNxM_TYPE)NxMSadKernelVoidFunc,
-            /*8 64xM */     CombinedAveraging64xMSAD_SSE2_INTRIN
+            /*8 64xM */     CombinedAveraging64xMSAD_AVX2_INTRIN
         },
     };
 

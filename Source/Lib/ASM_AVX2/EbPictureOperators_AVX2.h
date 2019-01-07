@@ -76,6 +76,95 @@ void UnpackAvgSafeSub_AVX2_INTRIN(
         EB_U32  width,
         EB_U32  height);
 
+
+
+void FullDistortionKernel4x4_32bit_BT_AVX2(
+	EB_S16  *coeff,
+	EB_U32   coeffStride,
+	EB_S16  *reconCoeff,
+	EB_U32   reconCoeffStride,
+	EB_U64   distortionResult[2],
+	EB_U32   areaWidth,
+	EB_U32   areaHeight);
+
+void FullDistortionKernel8x8_32bit_BT_AVX2(
+	EB_S16  *coeff,
+	EB_U32   coeffStride,
+	EB_S16  *reconCoeff,
+	EB_U32   reconCoeffStride,
+	EB_U64   distortionResult[2],
+	EB_U32   areaWidth,
+	EB_U32   areaHeight);
+
+void FullDistortionKernel16MxN_32bit_BT_AVX2(
+	EB_S16  *coeff,
+	EB_U32   coeffStride,
+	EB_S16  *reconCoeff,
+	EB_U32   reconCoeffStride,
+	EB_U64   distortionResult[2],
+	EB_U32   areaWidth,
+	EB_U32   areaHeight);
+
+void PictureAverageKernel_AVX2_INTRIN(
+	EB_BYTE src0,
+	EB_U32 src0Stride,
+	EB_BYTE src1,
+	EB_U32 src1Stride,
+	EB_BYTE dst,
+	EB_U32 dstStride,
+	EB_U32 areaWidth,
+	EB_U32 areaHeight);
+
+void ResidualKernel4x4_AVX2_INTRIN(
+	EB_U8   *input,
+	EB_U32   inputStride,
+	EB_U8   *pred,
+	EB_U32   predStride,
+	EB_S16  *residual,
+	EB_U32   residualStride,
+	EB_U32   areaWidth,
+	EB_U32   areaHeight);
+
+void ResidualKernel8x8_AVX2_INTRIN(
+	EB_U8   *input,
+	EB_U32   inputStride,
+	EB_U8   *pred,
+	EB_U32   predStride,
+	EB_S16  *residual,
+	EB_U32   residualStride,
+	EB_U32   areaWidth,
+	EB_U32   areaHeight);
+
+void ResidualKernel16x16_AVX2_INTRIN(
+	EB_U8   *input,
+	EB_U32   inputStride,
+	EB_U8   *pred,
+	EB_U32   predStride,
+	EB_S16  *residual,
+	EB_U32   residualStride,
+	EB_U32   areaWidth,
+	EB_U32   areaHeight);
+
+void ResidualKernel32x32_AVX2_INTRIN(
+	EB_U8   *input,
+	EB_U32   inputStride,
+	EB_U8   *pred,
+	EB_U32   predStride,
+	EB_S16  *residual,
+	EB_U32   residualStride,
+	EB_U32   areaWidth,
+	EB_U32   areaHeight);
+
+void ResidualKernel64x64_AVX2_INTRIN(
+	EB_U8   *input,
+	EB_U32   inputStride,
+	EB_U8   *pred,
+	EB_U32   predStride,
+	EB_S16  *residual,
+	EB_U32   residualStride,
+	EB_U32   areaWidth,
+	EB_U32   areaHeight);
+
 #ifdef __cplusplus
 }
 #endif

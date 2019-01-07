@@ -130,7 +130,7 @@ static const PictureAverage FUNC_TABLE PictureAverageArray[EB_ASM_TYPE_TOTAL] = 
 	// C_DEFAULT
     PictureAverageKernel,
 	// AVX2
-	PictureAverageKernel_SSE2_INTRIN,
+	PictureAverageKernel_AVX2_INTRIN, 
 };
 
 typedef void(*PictureAverage1Line)(
