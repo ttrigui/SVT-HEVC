@@ -13,11 +13,6 @@
 #define _mm256_set_m128i(/* __m128i */ hi, /* __m128i */ lo) \
     _mm256_insertf128_si256(_mm256_castsi128_si256(lo), (hi), 0x1)
 
-static __m128i _mm_loadhi_epi64(__m128i x, __m128i *p)
-{
-	return _mm_castpd_si128(_mm_loadh_pd(_mm_castsi128_pd(x), (double *)p));
-}
-
 static inline void _mm_storeh_epi64(__m128i *const d, const __m128i s) {
 	_mm_storeh_pi((__m64 *)d, _mm_castsi128_ps(s));
 }
@@ -1680,16 +1675,8 @@ void FullDistortionKernel4x4_32bit_BT_AVX2(
 	__m256i sum2 = _mm256_setzero_si256();
 	__m128i m0, m1;
 	__m256i x, y, z;
-	m0 = _mm_loadl_epi64((__m128i *)coeff); coeff += coeffStride;
-	m0 = _mm_loadhi_epi64(m0, (__m128i *)coeff); coeff += coeffStride;
-	m1 = _mm_loadl_epi64((__m128i *)coeff); coeff += coeffStride;
-	m1 = _mm_loadhi_epi64(m1, (__m128i *)coeff); coeff += coeffStride;
-	x = _mm256_set_m128i(m1, m0);
-	m0 = _mm_loadl_epi64((__m128i *)reconCoeff); reconCoeff += reconCoeffStride;
-	m0 = _mm_loadhi_epi64(m0, (__m128i *)reconCoeff); reconCoeff += reconCoeffStride;
-	m1 = _mm_loadl_epi64((__m128i *)reconCoeff); reconCoeff += reconCoeffStride;
-	m1 = _mm_loadhi_epi64(m1, (__m128i *)reconCoeff); reconCoeff += reconCoeffStride;
-	y = _mm256_set_m128i(m1, m0);
+	x = load16bit_signed_4x4_avx2(coeff, coeffStride);
+    y = load16bit_signed_4x4_avx2(reconCoeff, reconCoeffStride);
 	z = _mm256_madd_epi16(x, x);
 	sum2 = _mm256_add_epi32(sum2, z);
 	x = _mm256_sub_epi16(x, y);

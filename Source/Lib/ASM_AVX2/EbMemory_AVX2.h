@@ -32,16 +32,20 @@ static inline __m256i load8bit_4x4_avx2(const EB_U8 *const src,
     return _mm256_setr_m128i(src01, src23);
 }
 
+static inline __m128i load64bit_2_sse2(const void *const src,
+    const EB_U32 stride)
+{
+    const EB_U8 *const s = (const EB_U8 *)src;
+    const __m128i src0 = _mm_loadl_epi64((__m128i *)(s + 0 * stride));
+    const __m128i src1 = _mm_loadl_epi64((__m128i *)(s + 1 * stride));
+    return _mm_unpacklo_epi64(src0, src1);
+}
+
 static inline __m256i load8bit_8x4_avx2(const EB_U8 *const src,
     const EB_U32 stride)
 {
-    __m128i src01, src23;
-    src01 = _mm_loadl_epi64((__m128i *)(src + 0 * stride));
-    src01 = _mm_castpd_si128(_mm_loadh_pd(_mm_castsi128_pd(src01),
-        (double *)(src + 1 * stride)));
-    src23 = _mm_loadl_epi64((__m128i *)(src + 2 * stride));
-    src23 = _mm_castpd_si128(_mm_loadh_pd(_mm_castsi128_pd(src23),
-        (double *)(src + 3 * stride)));
+    const __m128i src01 = load64bit_2_sse2(src + 0 * stride, stride);
+    const __m128i src23 = load64bit_2_sse2(src + 2 * stride, stride);
     return _mm256_setr_m128i(src01, src23);
 }
 
@@ -59,6 +63,14 @@ static inline __m256i load8bit_16x2_unaligned_avx2(const EB_U8 *const src,
     const __m128i src0 = _mm_loadu_si128((__m128i *)(src + 0 * stride));
     const __m128i src1 = _mm_loadu_si128((__m128i *)(src + 1 * stride));
     return _mm256_setr_m128i(src0, src1);
+}
+
+static inline __m256i load16bit_signed_4x4_avx2(const EB_S16 *const src,
+    const EB_U32 stride)
+{
+    const __m128i src01 = load64bit_2_sse2(src + 0 * stride, sizeof(*src) * stride);
+    const __m128i src23 = load64bit_2_sse2(src + 2 * stride, sizeof(*src) * stride);
+    return _mm256_setr_m128i(src01, src23);
 }
 
 #endif // EbMemory_AVX2_h

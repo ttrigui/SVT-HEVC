@@ -468,7 +468,7 @@ static EB_RESDKERNEL_TYPE FUNC_TABLE ResidualKernel_funcPtrArray[EB_ASM_TYPE_TOT
 	// AVX2
 	{
 		/*0 4x4  */     ResidualKernel4x4_AVX2_INTRIN,
-		/*1 8x8  */     ResidualKernel, // ResidualKernel8x8_AVX2_INTRIN, // TTK disabled due to mismatch between c and AVX2
+		/*1 8x8  */     ResidualKernel8x8_AVX2_INTRIN, 
 		/*2 16x16 */    ResidualKernel16x16_AVX2_INTRIN,
 		/*3  */         (EB_RESDKERNEL_TYPE)PicResdVoidFunc,
 		/*4 32x32 */    ResidualKernel32x32_AVX2_INTRIN,
@@ -588,7 +588,7 @@ static EB_FULLDIST_TYPE FUNC_TABLE FullDistortionIntrinsic_funcPtrArray[EB_ASM_T
 		  },
 		{
 			{
-				/*0 4x4   */    FullDistortionKernel_32bit, // FullDistortionKernel4x4_32bit_BT_AVX2,// TTK disabled due to mismatch between c and AVX2
+				/*0 4x4   */    FullDistortionKernel4x4_32bit_BT_AVX2,
 				/*1 8x8   */    FullDistortionKernel8x8_32bit_BT_AVX2,
 				/*2 16x16 */    FullDistortionKernel16MxN_32bit_BT_AVX2,
 				/*3       */    (EB_FULLDIST_TYPE)FullDistortionVoidFunc,

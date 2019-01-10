@@ -138,7 +138,7 @@ extern "C" {
         // AVX2
         {
             /*0 4xM  */     CombinedAveraging4xMSAD_SSE2_INTRIN,
-            /*1 8xM  */     CombinedAveragingSAD, //CombinedAveraging8xMSAD_AVX2_INTRIN, // TTK disabled due to mismatch between c and AVX2
+            /*1 8xM  */     CombinedAveraging8xMSAD_AVX2_INTRIN, 
             /*2 16xM */     CombinedAveraging16xMSAD_AVX2_INTRIN,
             /*3 24xM */     CombinedAveraging24xMSAD_AVX2_INTRIN,
             /*4 32xM */     CombinedAveraging32xMSAD_AVX2_INTRIN,
